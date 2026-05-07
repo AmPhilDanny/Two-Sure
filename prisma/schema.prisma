@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGODB_URI")
+}
+
+model SystemConfig {
+  id              String   @id @map("_id")
+  scrapingUrls    String[]
+  
+  footballApiKey1 String?
+  footballApi1Enabled Boolean @default(true)
+  footballApiKey2 String?
+  footballApi2Enabled Boolean @default(false)
+  footballApiKey3 String?
+  footballApi3Enabled Boolean @default(false)
+  footballApiKey4 String?
+  footballApi4Enabled Boolean @default(false)
+
+  geminiApiKey  String?
+  geminiEnabled Boolean  @default(true)
+  geminiModel   String   @default("gemini-2.5-flash")
+  grokApiKey    String?
+  grokEnabled   Boolean  @default(false)
+  mistralApiKey String?
+  mistralEnabled Boolean @default(false)
+  mistralModel   String? @default("mistral-large-latest")
+  
+  openrouterApiKey  String?
+  openrouterEnabled Boolean @default(false)
+  openrouterModel   String? @default("google/gemini-2.0-flash-001")
+  analystPrompt String
+  scraperPrompt String
+  processorPrompt String @default("You are an expert data processor. Your job is to take raw match data and organize it into a clean, structured format for analysis. Sort matches by league and time, and ensure all stats are normalized.")
+  aiAnalysisEnabled Boolean @default(true)
+  predictionThreshold Int @default(75)
+  updatedAt     DateTime @updatedAt
+}
+
+model ProcessedData {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  matchDate   DateTime?
+  homeTeam    String
+  awayTeam    String
+  league      String
+  summary     String
+  structuredData Json
+  createdAt   DateTime @default(now())
+}
+
+model PredictionSlip {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId   String?  
+  totalOdds   Float
+  confidence  Int
+  targetOdds  Int
+  matches     Json     
+  status      String   @default("PENDING") 
+  actualResults Json?  
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model ScrapedData {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  sourceApi   String
+  matchId     String?  // External ID if available
+  homeTeam    String
+  awayTeam    String
+  league      String
+  matchDate   DateTime?
+  odds        Json     // Home, draw, away odds
+  rawStats    Json?    // Raw API data
+  createdAt   DateTime @default(now())
+}
+
