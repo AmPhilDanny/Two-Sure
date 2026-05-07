@@ -86,7 +86,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [data, setData]       = useState<any>(null);
   const [error, setError]     = useState<string | null>(null);
-  const [targets, setTargets] = useState([2, 5, 10]);
+  const [targets]       = useState([2]); // Always 2× — precision mode
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: 'Hello! I am your AI Football Assistant. I can help you analyze match data and generate high-probability slips. What would you like to know today?' }
   ]);
@@ -222,14 +222,37 @@ export default function HomePage() {
       const url = new URL('/api/predictions', window.location.origin);
       url.searchParams.set('targets', targets.join(','));
 
-      // Pass last AI chat messages as context so predictions factor in the conversation
+      // Build a rich context by combining: the current user chat input (highest priority)
+      // + last 3 assistant messages (for broader market awareness).
+      const contextParts: string[] = [];
+
+      // 1. Current user chat input — this is the highest priority signal
+      if (chatInput.trim().length > 5) {
+        contextParts.push(`USER INTENT: ${chatInput.trim()}`);
+      }
+
+      // 2. Last 3 user messages (what the user has been asking about)
+      const recentUserMsgs = messages
+        .filter(m => m.role === 'user')
+        .slice(-3)
+        .map(m => m.content)
+        .join(' | ');
+      if (recentUserMsgs.length > 10) {
+        contextParts.push(`RECENT REQUESTS: ${recentUserMsgs}`);
+      }
+
+      // 3. Last 2 assistant messages (for market context)
       const assistantMessages = messages
         .filter(m => m.role === 'assistant')
-        .slice(-3) // last 3 AI replies
+        .slice(-2)
         .map(m => m.content)
         .join('\n\n---\n\n');
       if (assistantMessages.length > 50) {
-        url.searchParams.set('chatContext', assistantMessages.substring(0, 2000));
+        contextParts.push(`ANALYST CONTEXT: ${assistantMessages.substring(0, 1500)}`);
+      }
+
+      if (contextParts.length > 0) {
+        url.searchParams.set('chatContext', contextParts.join('\n\n').substring(0, 2500));
       }
       
       const res  = await fetch(url.toString());
@@ -714,24 +737,14 @@ export default function HomePage() {
         >
           <motion.div variants={fadeUp} className="flex items-center justify-between">
             <div>
-              <h2 className="font-display text-2xl font-black text-foreground uppercase tracking-tight">TwoSure Slips</h2>
-              <p className="text-sm text-muted-foreground mt-1 font-medium">Latest TwoSure consensus picks</p>
+              <h2 className="font-display text-2xl font-black text-foreground uppercase tracking-tight">TwoSure Precision Slips</h2>
+              <p className="text-sm text-muted-foreground mt-1 font-medium">Low-risk 2× accumulator picks · Max 3 games per ticket</p>
             </div>
             <div className="flex items-center gap-2">
-              {[2, 5, 10].map(t => (
-                <button
-                  key={t}
-                  onClick={() => {
-                    setTargets(prev => prev.includes(t) ? (prev.length > 1 ? prev.filter(x => x !== t) : prev) : [...prev, t]);
-                    fetchData();
-                  }}
-                  className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${
-                    targets.includes(t) ? 'bg-primary/10 text-primary border-primary/30' : 'bg-secondary text-muted-foreground border-border'
-                  }`}
-                >
-                  {t}×
-                </button>
-              ))}
+              <span className="badge badge-green">✔ Precision Mode</span>
+              <button onClick={fetchData} disabled={loading} className="btn-icon" title="Regenerate">
+                <RefreshCcw size={14} />
+              </button>
             </div>
           </motion.div>
 
@@ -747,13 +760,18 @@ export default function HomePage() {
                 <div className="p-6 border-b border-border">
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <p className="section-label mb-1 uppercase tracking-widest text-[10px]">Target {slip.targetOdds}×</p>
+                      <p className="section-label mb-1 uppercase tracking-widest text-[10px]">
+                        Ticket {i + 1} &middot; {slip.matches.length} {slip.matches.length === 1 ? 'Game' : 'Games'}
+                      </p>
                       <p className="font-display text-3xl font-black text-foreground">
                         {slip.totalOdds}
                         <span className="text-lg text-muted-foreground font-medium ml-1">odds</span>
                       </p>
                     </div>
-                    <span className="badge badge-purple">{slip.confidence}% conf.</span>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="badge badge-purple">{slip.confidence}% conf.</span>
+                      <span className="badge badge-green text-[9px]">Low Risk</span>
+                    </div>
                   </div>
 
                   {/* Confidence bar */}
