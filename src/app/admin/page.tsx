@@ -198,14 +198,18 @@ export default function AdminPage() {
     }
   };
 
-  /* ── Load Processed Data ─────────────────────────────────────── */
-  const loadProcessedData = async () => {
+  /* ── Delete Processed Data ──────────────────────────────────── */
+  const deleteProcessedRecord = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this intelligence record?')) return;
     try {
-      const res = await fetch('/api/admin/processed-data');
-      const json = await res.json();
-      if (json.success) setProcessedData(json.data);
+      const res = await fetch(`/api/admin/processed-data?id=${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setProcessedData(prev => prev.filter(d => d.id !== id));
+        showNotification('Intelligence record deleted.', 'success');
+      }
     } catch (e) {
       console.error(e);
+      showNotification('Failed to delete record.', 'error');
     }
   };
 
@@ -232,19 +236,24 @@ export default function AdminPage() {
     }
   };
 
-  /* ── Load History ─────────────────────────────────────────── */
-  const loadHistory = async (pageNum = historyPage, search = historySearch) => {
+  /* ── Delete History Record ─────────────────────────────────────── */
+  const deleteHistoryRecord = async (id: string, isSession: boolean = false) => {
+    if (!confirm(`Are you sure you want to delete this ${isSession ? 'session' : 'slip'}?`)) return;
     try {
-      const res = await fetch(`/api/admin/history?page=${pageNum}&search=${encodeURIComponent(search)}`);
-      const json = await res.json();
-      if (json.success) {
-        setHistory(json.data);
-        setHistoryPage(json.pagination.page);
-        setHistoryTotalPages(json.pagination.totalPages);
-        setHistoryPageInput(json.pagination.page.toString());
+      const url = isSession ? `/api/history?sessionId=${id}` : `/api/history?id=${id}`;
+      const res = await fetch(url, { method: 'DELETE' });
+      if (res.ok) {
+        if (isSession) {
+          setHistory(prev => prev.filter(s => s.id !== id));
+        } else {
+          // If we deleted a single slip, we might need to refresh history or filter it
+          loadHistory();
+        }
+        showNotification('History record deleted.', 'success');
       }
     } catch (e) {
       console.error(e);
+      showNotification('Failed to delete history.', 'error');
     }
   };
 
@@ -951,9 +960,18 @@ export default function AdminPage() {
                       {processedData.map(d => (
                         <div key={d.id} className="p-5 rounded-xl border border-border bg-secondary/10 hover:border-primary/30 transition-colors">
                           <div className="flex justify-between items-start mb-3">
-                            <span className="text-xs font-mono text-muted-foreground bg-secondary/50 px-2 py-1 rounded">
-                              {formatToWAT(d.createdAt)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-muted-foreground bg-secondary/50 px-2 py-1 rounded">
+                                {formatToWAT(d.createdAt)}
+                              </span>
+                              <button 
+                                onClick={() => deleteProcessedRecord(d.id)}
+                                className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                                title="Delete Record"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                             <span className="badge badge-purple">
                               {Array.isArray(d.structuredData) ? d.structuredData.length : 'Object'} Items Processed
                             </span>
@@ -1059,11 +1077,11 @@ export default function AdminPage() {
                                     <Check size={14} />
                                   </button>
                                   <button
-                                    onClick={() => updateSlipStatus(slip.id, 'LOST')}
+                                    onClick={() => deleteHistoryRecord(slip.id, true)}
                                     className="p-1 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
-                                    title="Mark as Lost"
+                                    title="Delete Session"
                                   >
-                                    <X size={14} />
+                                    <Trash2 size={14} />
                                   </button>
                                 </div>
                               </td>
@@ -1187,6 +1205,13 @@ export default function AdminPage() {
                               className="btn-primary bg-destructive hover:bg-destructive/90 border-none"
                             >
                               LOST
+                            </button>
+                            <button
+                              onClick={() => { deleteHistoryRecord(selectedSlip.id, false); setSelectedSlip(null); }}
+                              className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-border"
+                              title="Delete Individual Slip"
+                            >
+                              <Trash2 size={18} />
                             </button>
                           </div>
                         </div>

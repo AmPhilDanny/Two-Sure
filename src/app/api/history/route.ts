@@ -43,21 +43,28 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
+    const id        = searchParams.get('id');
 
-    if (!sessionId) {
-      return NextResponse.json({ success: false, error: 'Session ID required' }, { status: 400 });
+    if (id) {
+      // Archive single slip
+      await prisma.predictionSlip.update({
+        where: { id },
+        data: { archived: true }
+      });
+    } else if (sessionId) {
+      // Archive all slips in this session
+      await prisma.predictionSlip.updateMany({
+        where: { 
+          OR: [
+            { sessionId: sessionId },
+            { id: sessionId } // fallback for old un-sessioned slips
+          ]
+        },
+        data: { archived: true }
+      });
+    } else {
+      return NextResponse.json({ success: false, error: 'ID or Session ID required' }, { status: 400 });
     }
-
-    // Archive all slips in this session
-    await prisma.predictionSlip.updateMany({
-      where: { 
-        OR: [
-          { sessionId: sessionId },
-          { id: sessionId } // fallback for old un-sessioned slips
-        ]
-      },
-      data: { archived: true }
-    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

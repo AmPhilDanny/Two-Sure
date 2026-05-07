@@ -112,12 +112,27 @@ export default function HomePage() {
     await fetchHistory();
   };
 
-  const deleteFromHistory = async (id: string) => {
+  const deleteHistorySession = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this generation session?')) return;
     try {
       await fetch(`/api/history?sessionId=${id}`, { method: 'DELETE' });
       setSlipHistory(prev => prev.filter(e => e.id !== id));
+      showNotification('Session deleted from history.', 'info');
     } catch (e) {
-      console.error('Failed to delete history item', e);
+      console.error('Failed to delete history session', e);
+    }
+  };
+
+  const deleteHistorySlip = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this individual slip?')) return;
+    try {
+      const res = await fetch(`/api/history?id=${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        showNotification('Slip deleted from history.', 'info');
+        fetchHistory(); // Refresh to reflect change
+      }
+    } catch (e) {
+      console.error('Failed to delete history slip', e);
     }
   };
 
@@ -128,6 +143,7 @@ export default function HomePage() {
         await fetch(`/api/history?sessionId=${entry.id}`, { method: 'DELETE' });
       }
       setSlipHistory([]);
+      showNotification('All history cleared.', 'info');
     } catch (e) {
       console.error('Failed to clear history', e);
     }
@@ -819,10 +835,11 @@ export default function HomePage() {
                         {entry.slips.length} Slips
                       </div>
                       <button
-                        onClick={(e) => { e.stopPropagation(); deleteFromHistory(entry.id); }}
+                        onClick={(e) => { e.stopPropagation(); deleteHistorySession(entry.id); }}
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Delete Session"
                       >
-                        <X size={16} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </div>
@@ -860,6 +877,13 @@ export default function HomePage() {
                                     }`}
                                   >
                                     LOSS
+                                  </button>
+                                  <button
+                                    onClick={() => deleteHistorySlip(slip.id)}
+                                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                    title="Delete Individual Slip"
+                                  >
+                                    <Trash2 size={14} />
                                   </button>
                                 </div>
                               </div>
