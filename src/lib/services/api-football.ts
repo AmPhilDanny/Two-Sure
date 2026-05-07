@@ -52,6 +52,24 @@ export class APIFootballService implements FootballApiService {
           away: market1X2.values.find((v: any) => v.value === 'Away')?.odd,
         });
       }
+
+      // Over/Under market
+      const marketOU = bookmaker.bets?.find((b: any) => b.name === 'Over/Under');
+      if (marketOU) {
+        const fixtureOdds = oddsMap.get(o.fixture.id) || {};
+        const over15 = marketOU.values.find((v: any) => v.value === 'Over 1.5')?.odd;
+        const over25 = marketOU.values.find((v: any) => v.value === 'Over 2.5')?.odd;
+        const under25 = marketOU.values.find((v: any) => v.value === 'Under 2.5')?.odd;
+        oddsMap.set(o.fixture.id, { ...fixtureOdds, over15, over25, under25 });
+      }
+
+      // BTTS market
+      const marketBTTS = bookmaker.bets?.find((b: any) => b.name === 'Both Teams Score');
+      if (marketBTTS) {
+        const fixtureOdds = oddsMap.get(o.fixture.id) || {};
+        const btts = marketBTTS.values.find((v: any) => v.value === 'Yes')?.odd;
+        oddsMap.set(o.fixture.id, { ...fixtureOdds, btts });
+      }
     });
 
     return fixtures.map((f: any) => {
@@ -66,7 +84,11 @@ export class APIFootballService implements FootballApiService {
           ...f,
           odd_1: matchOdds?.home,
           odd_x: matchOdds?.draw,
-          odd_2: matchOdds?.away
+          odd_2: matchOdds?.away,
+          odd_over_15: matchOdds?.over15,
+          odd_over_25: matchOdds?.over25,
+          odd_under_25: matchOdds?.under25,
+          odd_btts: matchOdds?.btts
         }
       };
     });

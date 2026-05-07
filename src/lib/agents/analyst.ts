@@ -18,39 +18,82 @@ export class AnalystAgent {
   }
 
   /**
-   * Generate precision 2× slips from ENRICHED ProcessedData.
-   * Uses pre-computed implied probabilities — much faster and more accurate.
-   * Only ELITE and HIGH tier matches are considered.
+   * Parse user intent from chat context (e.g., "Top 10 Over 1.5 goals")
+   */
+  private parseIntent(chatContext?: string): { market?: string; count?: number } {
+    if (!chatContext) return {};
+    const text = chatContext.toLowerCase();
+    
+    let market: string | undefined;
+    if (text.includes('1.5') || text.includes('one point five')) market = 'Over 1.5';
+    else if (text.includes('2.5') || text.includes('two point five')) market = 'Over 2.5';
+    else if (text.includes('btts') || text.includes('gg') || text.includes('both teams')) market = 'GG (BTTS)';
+    else if (text.includes('home win') || text.includes('direct win')) market = 'Home Win';
+    else if (text.includes('away win')) market = 'Away Win';
+
+    let count: number | undefined;
+    const countMatch = text.match(/\b(top|get|want|show|list)\s*(\d{1,2})\b/) || text.match(/\b(\d{1,2})\s*matches\b/);
+    if (countMatch) {
+      count = parseInt(countMatch[2] || countMatch[1]);
+    } else if (text.includes('top 10') || text.includes('ten matches')) {
+      count = 10;
+    } else if (text.includes('top 5') || text.includes('five matches')) {
+      count = 5;
+    }
+    
+    return { market, count };
+  }
+
+  /**
+   * Generate precision slips from ENRICHED ProcessedData.
    */
   async generateSlipsFromEnriched(
     enriched: EnrichedMatch[],
     chatContext?: string
   ): Promise<BetSlip[]> {
-    console.log(`[AnalystAgent] Generating precision slips from ${enriched.length} enriched matches...`);
+    const intent = this.parseIntent(chatContext);
+    console.log(`[AnalystAgent] Generating slips. Intent detected:`, intent);
 
-    // Filter to ELITE + HIGH only
+    // Filter to ELITE + HIGH first, fallback to MEDIUM if intent-count is high
     const qualified = enriched.filter(m =>
-      m.confidenceTier === 'ELITE' || m.confidenceTier === 'HIGH'
+      m.confidenceTier === 'ELITE' || 
+      m.confidenceTier === 'HIGH' ||
+      (intent.count && intent.count > 5 && m.confidenceTier === 'MEDIUM') // Expand pool for long slips
     );
 
     if (qualified.length === 0) {
-      console.warn('[AnalystAgent] No ELITE or HIGH tier matches available.');
+      console.warn('[AnalystAgent] No qualified matches available.');
       return [];
     }
 
     // Convert enriched matches to PredictionResult format
     const predictions: PredictionResult[] = qualified.map(m => {
-      // Pick the strongest market
-      const candidates = ([
+      // Pick markets based on intent or strongest
+      const allCandidates = [
         ['Home Win',  m.impliedProbs.home,   m.bestOdds.home],
         ['Away Win',  m.impliedProbs.away,   m.bestOdds.away],
         ['GG (BTTS)', m.impliedProbs.btts,   m.bestOdds.btts],
+        ['Over 1.5',  m.impliedProbs.over15, m.bestOdds.over15],
         ['Over 2.5',  m.impliedProbs.over25, m.bestOdds.over25],
-      ].filter(([, p, o]) => p !== null && o !== null && Number(o) >= 1.10 && Number(o) <= 1.65) as [string, number, number][]);
+      ].filter(([, p, o]) => p !== null && o !== null && Number(o) >= 1.05) as [string, number, number][];
 
-      if (!candidates.length) return null;
-      candidates.sort((a, b) => b[1] - a[1]);
-      const [selection, probability, odds] = candidates[0];
+      let selection: string;
+      let probability: number;
+      let odds: number;
+
+      if (intent.market) {
+        const found = allCandidates.find(([name]) => name.toLowerCase() === intent.market?.toLowerCase());
+        if (found) {
+          [selection, probability, odds] = found;
+        } else {
+          // Fallback if specific market missing for this match
+          return null;
+        }
+      } else {
+        allCandidates.sort((a, b) => b[1] - a[1]);
+        if (!allCandidates.length) return null;
+        [selection, probability, odds] = allCandidates[0];
+      }
 
       return {
         match:       `${m.homeTeam} vs ${m.awayTeam}`,
@@ -59,7 +102,7 @@ export class AnalystAgent {
         probability,
         reasoning:   (m as any).summary?.startsWith('AI Analysis:') 
                        ? (m as any).summary 
-                       : `Implied probability: ${(probability * 100).toFixed(1)}% | League: ${m.league} | Sources: ${m.sources.join(', ')}${m.hasBookmakerData ? ' | ✓ Bookmaker data' : ''}`,
+                       : `Implied probability: ${(probability * 100).toFixed(1)}% | League: ${m.league} | Sources: ${m.sources.join(', ')}`,
         league:      m.league,
         homeTeam:    m.homeTeam,
         awayTeam:    m.awayTeam,
@@ -70,17 +113,29 @@ export class AnalystAgent {
       };
     }).filter(Boolean) as PredictionResult[];
 
-    // Boost chat-context matches to front
     let sorted = [...predictions].sort((a, b) => b.probability - a.probability);
-    if (chatContext && chatContext.trim().length > 20) {
-      const keywords = chatContext.toLowerCase().match(/\b(\w{3,})\b/g) || [];
-      sorted = [
-        ...sorted.filter(p => keywords.some(kw => p.match.toLowerCase().includes(kw) || p.reasoning.toLowerCase().includes(kw))),
-        ...sorted.filter(p => !keywords.some(kw => p.match.toLowerCase().includes(kw) || p.reasoning.toLowerCase().includes(kw)))
-      ];
+
+    // If "Long Slip Mode" (e.g., Top 10) requested
+    if (intent.count && intent.count > 3) {
+      console.log(`[AnalystAgent] Long Slip Mode: Building ticket with ${intent.count} matches.`);
+      const matches = sorted.slice(0, intent.count);
+      let combinedOdds = 1.0;
+      let combinedProb = 1.0;
+      matches.forEach(m => {
+        combinedOdds *= m.odds;
+        combinedProb *= (m as any).aiScore || m.probability;
+      });
+
+      return [{
+        id: `LONG-SLIP-${Date.now()}`,
+        matches,
+        totalOdds: parseFloat(combinedOdds.toFixed(2)),
+        confidence: Math.round(combinedProb * 100),
+        targetOdds: 0 // No target for long slips
+      }];
     }
 
-    // Build up to 3 unique tickets
+    // Standard 3 unique tickets
     const slips: BetSlip[] = [];
     const usedGlobally = new Set<string>();
 
@@ -97,85 +152,11 @@ export class AnalystAgent {
   }
 
   /**
-   * Generate precision 2× slips from RAW ScrapedData (fallback when no ProcessedData available).
-   */
-  async generateSlips(
-    matches: MatchData[],
-    targetOdds: number[] = [2],
-    chatContext?: string
-  ): Promise<BetSlip[]> {
-    console.log(`[AnalystAgent] Generating precision 2× slips...`);
-
-    if (!matches.length) {
-      console.warn('[AnalystAgent] No match data available');
-      return [];
-    }
-
-    // ── Step 1: Get AI predictions for up to 60 matches in a single batch ────
-    const allPredictions = await this.aiFactory.predictBatch(
-      matches.slice(0, 60),
-      chatContext
-    );
-
-    if (!allPredictions.length) {
-      console.warn('[AnalystAgent] No predictions returned from AI batch');
-      return [];
-    }
-
-    // ── Step 2: Strict quality filter ────────────────────────────────────
-    // Only picks the AI rates at 80%+ probability and odds between 1.10 and 1.65
-    let qualified = allPredictions
-      .filter(p => p.probability >= 0.80 && p.odds >= 1.10 && p.odds <= 1.65)
-      .sort((a, b) => b.probability - a.probability); // highest confidence first
-
-    // ── Step 3: Boost chat-context matches to the front if present ──────────
-    if (chatContext && chatContext.trim().length > 20) {
-      // Extract keywords from the chat context (leagues, teams, market types)
-      const keywords = chatContext.toLowerCase().match(/\b(\w{3,})\b/g) || [];
-      qualified = [
-        ...qualified.filter(p =>
-          keywords.some(kw =>
-            p.match.toLowerCase().includes(kw) ||
-            p.reasoning.toLowerCase().includes(kw)
-          )
-        ),
-        ...qualified.filter(p =>
-          !keywords.some(kw =>
-            p.match.toLowerCase().includes(kw) ||
-            p.reasoning.toLowerCase().includes(kw)
-          )
-        )
-      ];
-    }
-
-    // ── Step 4: Build up to 3 unique tickets, NO match reuse ──────────────
-    const slips: BetSlip[] = [];
-    const usedGlobally = new Set<string>(); // Ensures no match appears on > 1 ticket
-
-    for (let ticketNum = 0; ticketNum < 3; ticketNum++) {
-      const available = qualified.filter(p => !usedGlobally.has(p.match));
-      if (available.length === 0) break;
-
-      const slip = this.buildPrecisionTicket(available, ticketNum + 1);
-      if (slip.matches.length === 0) break;
-
-      // Mark all games in this slip as globally used
-      slip.matches.forEach(m => usedGlobally.add(m.match));
-      slips.push(slip);
-    }
-
-    return slips;
-  }
-
-  /**
    * Build a single 2× precision ticket.
-   * - Tries to accumulate 2–3 games to approach 2× combined odds.
-   * - Falls back to a single game if only one elite pick is available.
-   * - Stops at 3 games maximum.
    */
   private buildPrecisionTicket(candidates: PredictionResult[], ticketNum: number): BetSlip {
-    const TARGET    = 2.0;   // Aim for ~2× combined odds
-    const MAX_GAMES = 3;     // Hard cap per ticket
+    const TARGET    = 2.0;
+    const MAX_GAMES = 3;
 
     const chosen: PredictionResult[] = [];
     let combinedOdds = 1.0;
@@ -197,5 +178,31 @@ export class AnalystAgent {
       confidence:  Math.round(combinedProbability * 100),
       targetOdds:  2
     };
+  }
+  /**
+   * Generate precision 2× slips from RAW ScrapedData (fallback).
+   */
+  async generateSlips(
+    matches: MatchData[],
+    targetOdds: number[] = [2],
+    chatContext?: string
+  ): Promise<BetSlip[]> {
+    console.log(`[AnalystAgent] Generating fallback slips...`);
+    const allPredictions = await this.aiFactory.predictBatch(matches.slice(0, 60), chatContext);
+    const qualified = allPredictions
+      .filter(p => p.probability >= 0.80 && p.odds >= 1.10 && p.odds <= 1.65)
+      .sort((a, b) => b.probability - a.probability);
+
+    const slips: BetSlip[] = [];
+    const usedGlobally = new Set<string>();
+    for (let ticketNum = 0; ticketNum < 3; ticketNum++) {
+      const available = qualified.filter(p => !usedGlobally.has(p.match));
+      if (available.length === 0) break;
+      const slip = this.buildPrecisionTicket(available, ticketNum + 1);
+      if (slip.matches.length === 0) break;
+      slip.matches.forEach(m => usedGlobally.add(m.match));
+      slips.push(slip);
+    }
+    return slips;
   }
 }

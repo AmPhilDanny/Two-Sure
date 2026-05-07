@@ -18,6 +18,7 @@ export interface MatchData {
     draw: number;
     away: number;
     btts?: number;
+    over15?: number;
     over25?: number;
     under25?: number;
   };
@@ -155,8 +156,9 @@ export class ScraperAgent {
       let draw: number | null = null;
       let away: number | null = null;
       let btts: number | null = null;
-      let over: number | null = null;
-      let under: number | null = null;
+      let over15: number | null = null;
+      let over25: number | null = null;
+      let under25: number | null = null;
 
       // 1. Try to find real decimal odds
       if (raw.odd_1) home = parseFloat(raw.odd_1);
@@ -167,6 +169,10 @@ export class ScraperAgent {
 
       if (raw.odd_2) away = parseFloat(raw.odd_2);
       else if (raw.match_awayteam_extra_coords) away = parseFloat(raw.match_awayteam_extra_coords);
+
+      over15 = raw.odd_over_15 ? parseFloat(raw.odd_over_15) : null;
+      over25 = raw.odd_over_25 ? parseFloat(raw.odd_over_25) : null;
+      btts   = raw.odd_btts    ? parseFloat(raw.odd_btts)    : null;
 
       // 2. Fallback to probabilities (convert % to decimal odds)
       const probHW = raw.prob_HW || stats.probabilities?.home;
@@ -198,8 +204,9 @@ export class ScraperAgent {
           draw: draw || 3.0, 
           away: away || 3.0, 
           btts: btts || 1.9, 
-          over25: over || 1.8, 
-          under25: under || 1.8 
+          over15: over15 || 1.25,
+          over25: over25 || 1.8, 
+          under25: under25 || 1.8 
         },
         apiStats: { 
           source: name, 
@@ -269,21 +276,18 @@ export class ScraperAgent {
 
   private async saveToDb(matches: MatchData[], source: string) {
     try {
-      const { default: prisma } = await import('@/lib/prisma');
-      for (const m of matches) {
-        await prisma.scrapedData.create({
-          data: {
-            sourceApi: source,
-            matchId: m.id || `web-${Date.now()}-${Math.random()}`,
-            homeTeam: m.homeTeam,
-            awayTeam: m.awayTeam,
-            league: m.league,
-            matchDate: new Date(),
-            odds: m.odds,
-            rawStats: m.apiStats
-          }
-        });
-      }
+      const { default: prisma } = await import('../prisma');
+      const data = matches.map(m => ({
+        sourceApi: source,
+        matchId: m.id || `web-${Date.now()}-${Math.random()}`,
+        homeTeam: m.homeTeam,
+        awayTeam: m.awayTeam,
+        league: m.league,
+        matchDate: new Date(),
+        odds: m.odds,
+        rawStats: m.apiStats
+      }));
+      await (prisma.scrapedData as any).createMany({ data });
     } catch (dbErr) {
       console.warn(`Could not save scraped data to DB:`, dbErr);
     }
@@ -291,7 +295,7 @@ export class ScraperAgent {
   
   private async deleteOldData() {
     try {
-      const { default: prisma } = await import('@/lib/prisma');
+      const { default: prisma } = await import('../prisma');
       const tenDaysAgo = new Date();
       tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
       

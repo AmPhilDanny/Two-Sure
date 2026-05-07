@@ -13,6 +13,7 @@ export interface EnrichedMatch {
     draw:    number | null;
     away:    number | null;
     btts:    number | null;
+    over15:  number | null;
     over25:  number | null;
     under25: number | null;
   };
@@ -21,6 +22,7 @@ export interface EnrichedMatch {
     draw:    number | null;
     away:    number | null;
     btts:    number | null;
+    over15:  number | null;
     over25:  number | null;
   };
   valueScore:      number;           // positive = value bet
@@ -95,6 +97,7 @@ function bestMarketFor(imp: EnrichedMatch['impliedProbs']): string {
     ['Draw',      imp.draw],
     ['Away Win',  imp.away],
     ['GG (BTTS)', imp.btts],
+    ['Over 1.5',  imp.over15],
     ['Over 2.5',  imp.over25],
   ];
   const valid = candidates.filter(([, p]) => p !== null) as [string, number][];
@@ -178,6 +181,7 @@ export class ProcessorAgent {
         draw:    bestOdd(allOdds.map((o: any) => o?.draw)),
         away:    bestOdd(allOdds.map((o: any) => o?.away)),
         btts:    bestOdd(allOdds.map((o: any) => o?.btts)),
+        over15:  bestOdd(allOdds.map((o: any) => o?.over15)),
         over25:  bestOdd(allOdds.map((o: any) => o?.over25)),
         under25: bestOdd(allOdds.map((o: any) => o?.under25)),
       };
@@ -187,6 +191,7 @@ export class ProcessorAgent {
         draw:   impliedProb(bestOdds.draw),
         away:   impliedProb(bestOdds.away),
         btts:   impliedProb(bestOdds.btts),
+        over15: impliedProb(bestOdds.over15),
         over25: impliedProb(bestOdds.over25),
       };
 
@@ -211,9 +216,27 @@ export class ProcessorAgent {
         impliedProbs.home ?? 0,
         impliedProbs.away ?? 0,
         impliedProbs.btts ?? 0,
+        impliedProbs.over15 ?? 0,
         impliedProbs.over25 ?? 0
       );
       const confidenceTier = tier(bestProb);
+
+      // --- Intelligence Rule 1: Over 1.5 Inference from Over 2.5 ---
+      // If Over 1.5 is missing or low, but Over 2.5 is high, infer a very high Over 1.5
+      if (impliedProbs.over25 && impliedProbs.over25 >= 0.65) {
+        if (!impliedProbs.over15 || impliedProbs.over15 < impliedProbs.over25) {
+          impliedProbs.over15 = Math.min(0.95, impliedProbs.over25 * 1.35);
+          if (!bestOdds.over15) {
+            bestOdds.over15 = parseFloat((1 / impliedProbs.over15).toFixed(2));
+          }
+        }
+      }
+
+      // --- Intelligence Rule 2: Over 1.5 vs Over 2.5 Choice ---
+      let finalBestMarket = bestMarketName;
+      if (bestMarketName === 'Over 1.5' && impliedProbs.over25 && impliedProbs.over25 >= 0.75) {
+        finalBestMarket = 'Over 2.5'; // Upgrade for better value since it's still elite
+      }
 
       const matchDate = records
         .map(r => r.matchDate)
@@ -228,7 +251,7 @@ export class ProcessorAgent {
         impliedProbs,
         valueScore,
         confidenceTier,
-        bestMarket:       bestMarketName,
+        bestMarket:       finalBestMarket,
         sources,
         hasBookmakerData,
       });
