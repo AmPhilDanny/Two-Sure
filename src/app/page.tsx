@@ -150,11 +150,9 @@ export default function HomePage() {
   };
 
   const clearHistory = async () => {
+    if (!confirm('Are you sure you want to clear the entire generation history?')) return;
     try {
-      // Archive all currently visible slips
-      for (const entry of slipHistory) {
-        await fetch(`/api/history?sessionId=${entry.id}`, { method: 'DELETE' });
-      }
+      await fetch('/api/history?all=true', { method: 'DELETE' });
       setSlipHistory([]);
       showNotification('All history cleared.', 'info');
     } catch (e) {

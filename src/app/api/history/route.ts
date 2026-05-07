@@ -44,8 +44,14 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId');
     const id        = searchParams.get('id');
+    const all       = searchParams.get('all') === 'true';
 
-    if (id) {
+    if (all) {
+      await prisma.predictionSlip.updateMany({
+        where: { archived: false },
+        data: { archived: true }
+      });
+    } else if (id) {
       // Archive single slip
       await prisma.predictionSlip.update({
         where: { id },
@@ -53,13 +59,19 @@ export async function DELETE(request: Request) {
       });
     } else if (sessionId) {
       // Archive all slips in this session
+      const where: any = { 
+        OR: [
+          { sessionId: sessionId }
+        ]
+      };
+      
+      // Only add id fallback if it's a valid MongoDB ObjectId format
+      if (sessionId.match(/^[0-9a-fA-F]{24}$/)) {
+        where.OR.push({ id: sessionId });
+      }
+
       await prisma.predictionSlip.updateMany({
-        where: { 
-          OR: [
-            { sessionId: sessionId },
-            { id: sessionId } // fallback for old un-sessioned slips
-          ]
-        },
+        where,
         data: { archived: true }
       });
     } else {
