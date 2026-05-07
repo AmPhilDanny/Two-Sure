@@ -10,6 +10,11 @@ export interface NormalizedFixture {
     last5?: any;
     bttsOdds?: number;
     overUnder25?: number;
+    probabilities?: {
+      home: number;
+      draw: number;
+      away: number;
+    };
   };
 }
 
