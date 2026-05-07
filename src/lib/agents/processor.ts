@@ -28,6 +28,7 @@ export interface EnrichedMatch {
   bestMarket:      string;           // "Home Win", "GG", "Over 2.5", etc.
   sources:         string[];         // which APIs/CSVs contributed
   hasBookmakerData: boolean;         // true if a CSV bookmaker record was present
+  summary?:         string;           // AI reasoning or manual summary
 }
 
 export interface ProcessorResult {
