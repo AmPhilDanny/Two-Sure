@@ -31,6 +31,19 @@ function renderMarkdown(text: string): string {
     .replace(/\*(.+?)\*/g, '<em class="italic text-muted-foreground">$1</em>')
     // Horizontal rule
     .replace(/^---$/gm, '<hr class="border-border my-3" />')
+    // Tables
+    .replace(/((?:\|.+\|(?:\n|\r))+)/g, (match) => {
+      const rows = match.trim().split('\n');
+      if (rows.length < 2) return match;
+      const htmlRows = rows.map((row, i) => {
+        const cells = row.split('|').filter(c => c.trim() !== '' || row.indexOf('|') !== row.lastIndexOf('|')).map(c => c.trim());
+        const tag = i === 0 ? 'th' : 'td';
+        // Skip separator rows (---)
+        if (row.match(/^\|?\s*:?-+:?\s*\|/)) return '';
+        return `<tr>${cells.map(c => `<${tag} class="px-3 py-2 border border-border">${c}</${tag}>`).join('')}</tr>`;
+      }).filter(Boolean).join('');
+      return `<div class="overflow-x-auto my-4"><table class="w-full text-xs border-collapse border border-border rounded-lg bg-secondary/20">${htmlRows}</table></div>`;
+    })
     // Bullet lists
     .replace(/^[\-\*] (.+)$/gm, '<li class="flex gap-2 text-sm"><span class="text-primary mt-1 shrink-0">•</span><span>$1</span></li>')
     // Numbered lists

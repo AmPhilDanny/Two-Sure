@@ -79,12 +79,16 @@ export async function POST(request: Request) {
     });
 
     const context = recentMatches.map(m => {
-      return `[${m.league}] ${m.homeTeam} vs ${m.awayTeam} | Odds: H:${(m.odds as any)?.home} D:${(m.odds as any)?.draw} A:${(m.odds as any)?.away} | BTTS:${(m.odds as any)?.btts || 'N/A'} | Over2.5:${(m.odds as any)?.over25 || 'N/A'}`;
+      const timeStr = m.matchDate ? new Date(m.matchDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }) : 'N/A';
+      return `[${m.league}] ${m.homeTeam} vs ${m.awayTeam} | Time: ${timeStr} WAT | Odds: H:${(m.odds as any)?.home} D:${(m.odds as any)?.draw} A:${(m.odds as any)?.away} | BTTS:${(m.odds as any)?.btts || 'N/A'} | Over2.5:${(m.odds as any)?.over25 || 'N/A'}`;
     }).join('\n');
 
+    const currentWAT = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' });
+    const currentWATDate = new Date().toLocaleDateString('en-GB', { timeZone: 'Africa/Lagos' });
+
     const fullMessage = context.length > 0
-      ? `DATABASE CONTEXT — Today's Matches (${new Date().toDateString()}):\n${context}\n\nCONVERSATION HISTORY:\n${history.map((h: any) => `${h.role.toUpperCase()}: ${h.content}`).join('\n')}\n\nUSER QUESTION: ${message}\n\nINSTRUCTIONS:\n1. Use the DATABASE CONTEXT to find relevant matches.\n2. If the user asks for "Top X" or "Safest" matches, analyze the odds: lower odds (1.20 - 1.50) usually indicate "Low Risk", while high odds indicate "High Reward".\n3. For "GG" / "Goal-Goal" / "BTTS", identify matches with competitive odds or attacking teams.\n4. For "Over/Under", reference the over25/under25 odds. If the user asks for Over 1.5, infer it from the Over 2.5 probability.\n5. Be professional. List specific teams and why you chose them. If no matches fit, say so clearly.`
-      : `No match data for today (${new Date().toDateString()}) in the database yet.\n\nUSER QUESTION: ${message}\n\nPlease let the user know there is no match data available yet for today, and suggest they run the scraper from the Admin panel.`;
+      ? `CURRENT SYSTEM TIME (WAT): ${currentWAT} on ${currentWATDate}\n\nDATABASE CONTEXT — Today's Matches:\n${context}\n\nCONVERSATION HISTORY:\n${history.map((h: any) => `${h.role.toUpperCase()}: ${h.content}`).join('\n')}\n\nUSER QUESTION: ${message}\n\nINSTRUCTIONS:\n1. Use the DATABASE CONTEXT to find relevant matches.\n2. If the user asks for matches starting in the "next X hours", compare the match "Time" with the "CURRENT SYSTEM TIME (WAT)".\n3. If the user asks for "Top X" or "Safest", analyze the odds (lower is safer).\n4. For Over 1.5, infer from Over 2.5 data.\n5. USE TABLES for data-heavy responses (e.g. lists of matches).\n6. Be professional and precise.`
+      : `No match data for today (${currentWATDate}) yet.\n\nUSER QUESTION: ${message}`;
 
     const response = await ai.process(recentMatches, fullMessage);
 
