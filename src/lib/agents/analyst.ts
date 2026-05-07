@@ -57,12 +57,16 @@ export class AnalystAgent {
         prediction:  selection,
         odds,
         probability,
-        reasoning:   `Implied probability: ${(probability * 100).toFixed(1)}% | League: ${m.league} | Sources: ${m.sources.join(', ')}${m.hasBookmakerData ? ' | ✓ Bookmaker data' : ''}`,
+        reasoning:   (m as any).summary?.startsWith('AI Analysis:') 
+                       ? (m as any).summary 
+                       : `Implied probability: ${(probability * 100).toFixed(1)}% | League: ${m.league} | Sources: ${m.sources.join(', ')}${m.hasBookmakerData ? ' | ✓ Bookmaker data' : ''}`,
         league:      m.league,
         homeTeam:    m.homeTeam,
         awayTeam:    m.awayTeam,
         status:      'PENDING',
-        confidence:  Math.round(probability * 100)
+        confidence:  Math.round(probability * 100),
+        aiScore:     (m.impliedProbs as any).aiScore,
+        aiReasoning: (m as any).summary?.startsWith('AI Analysis:') ? (m as any).summary : null
       };
     }).filter(Boolean) as PredictionResult[];
 
@@ -183,7 +187,7 @@ export class AnalystAgent {
 
       chosen.push(pred);
       combinedOdds        *= pred.odds;
-      combinedProbability *= pred.probability;
+      combinedProbability *= (pred as any).aiScore || pred.probability;
     }
 
     return {

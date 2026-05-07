@@ -105,10 +105,12 @@ function bestMarketFor(imp: EnrichedMatch['impliedProbs']): string {
 // ─── Processor Agent ──────────────────────────────────────────────────────────
 
 export class ProcessorAgent {
-  private aiFactory: AIFactory;
+  private aiFactory: AIFactory | null = null;
 
-  constructor(config: AIConfig) {
-    this.aiFactory = new AIFactory(config);
+  constructor(config?: AIConfig) {
+    if (config) {
+      this.aiFactory = new AIFactory(config);
+    }
   }
 
   /**
@@ -231,7 +233,40 @@ export class ProcessorAgent {
       });
     }
 
-    // ── Step 3: Sort by best probability desc ─────────────────────────────────
+    // ── Step 3: AI Intelligence Overlay ──────────────────────────────────────
+    // If we have default/low confidence matches and AI is enabled, let the AI analyze them.
+    if (this.aiFactory && enriched.length > 0) {
+      const candidatesForAI = enriched.filter(m => 
+        m.confidenceTier === 'SKIP' || 
+        m.confidenceTier === 'MEDIUM' || 
+        (m.bestOdds.home === 2.0 && m.bestOdds.draw === 3.0)
+      ).slice(0, 40); // Limit to 40 matches per processing run to stay within AI limits
+
+      if (candidatesForAI.length > 0) {
+        console.log(`[Processor] Performing AI analysis on ${candidatesForAI.length} candidate matches...`);
+        const aiResults = await this.aiFactory.predictBatch(candidatesForAI.map(m => ({
+          homeTeam: m.homeTeam,
+          awayTeam: m.awayTeam,
+          league: m.league,
+          odds: m.bestOdds
+        })));
+
+        for (const aiRes of aiResults) {
+          const match = enriched.find(m => `${m.homeTeam} vs ${m.awayTeam}` === aiRes.match);
+          if (match && aiRes.probability >= 0.65) {
+            // Upgrade confidence based on AI intelligence
+            match.confidenceTier = aiRes.probability >= 0.75 ? 'ELITE' : 'HIGH';
+            match.bestMarket = aiRes.prediction;
+            // Also inject the AI reasoning into the summary for the analyst
+            match.summary = `AI Analysis: ${aiRes.reasoning}`;
+            // Adjust implied probs to reflect AI confidence
+            (match.impliedProbs as any).aiScore = aiRes.probability;
+          }
+        }
+      }
+    }
+
+    // ── Step 4: Sort by best probability desc ─────────────────────────────────
     enriched.sort((a, b) => {
       const aMax = Math.max(a.impliedProbs.home ?? 0, a.impliedProbs.away ?? 0, a.impliedProbs.btts ?? 0, a.impliedProbs.over25 ?? 0);
       const bMax = Math.max(b.impliedProbs.home ?? 0, b.impliedProbs.away ?? 0, b.impliedProbs.btts ?? 0, b.impliedProbs.over25 ?? 0);
