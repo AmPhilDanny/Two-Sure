@@ -41,12 +41,12 @@ export class AnalystAgent {
     // Convert enriched matches to PredictionResult format
     const predictions: PredictionResult[] = qualified.map(m => {
       // Pick the strongest market
-      const candidates: [string, number | null, number | null][] = [
+      const candidates = ([
         ['Home Win',  m.impliedProbs.home,   m.bestOdds.home],
         ['Away Win',  m.impliedProbs.away,   m.bestOdds.away],
         ['GG (BTTS)', m.impliedProbs.btts,   m.bestOdds.btts],
         ['Over 2.5',  m.impliedProbs.over25, m.bestOdds.over25],
-      ].filter(([, p, o]) => p !== null && o !== null && Number(o) >= 1.10 && Number(o) <= 1.65) as [string, number, number][];
+      ].filter(([, p, o]) => p !== null && o !== null && Number(o) >= 1.10 && Number(o) <= 1.65) as [string, number, number][]);
 
       if (!candidates.length) return null;
       candidates.sort((a, b) => b[1] - a[1]);
