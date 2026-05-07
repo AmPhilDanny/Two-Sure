@@ -23,31 +23,33 @@ export class AnalystAgent {
   private parseIntent(chatContext?: string): { market?: string; count?: number; isListRequested?: boolean } {
     if (!chatContext) return {};
     
-    // Prioritize actual USER INTENT section if present
-    let text = chatContext.toLowerCase();
+    const lowerContext = chatContext.toLowerCase();
     const userIntentMatch = chatContext.match(/USER INTENT: (.*?)(\n\n|$)/s);
-    if (userIntentMatch) {
-      text = userIntentMatch[1].toLowerCase();
-    }
+    const userIntentText = userIntentMatch ? userIntentMatch[1].toLowerCase() : null;
     
+    // Market detection can use the whole context for continuity
     let market: string | undefined;
-    if (text.includes('1.5') || text.includes('one point five')) market = 'Over 1.5';
-    else if (text.includes('2.5') || text.includes('two point five')) market = 'Over 2.5';
-    else if (text.includes('btts') || text.includes('gg') || text.includes('both teams')) market = 'GG (BTTS)';
-    else if (text.includes('home win') || text.includes('direct win')) market = 'Home Win';
-    else if (text.includes('away win')) market = 'Away Win';
+    if (lowerContext.includes('1.5') || lowerContext.includes('one point five')) market = 'Over 1.5';
+    else if (lowerContext.includes('2.5') || lowerContext.includes('two point five')) market = 'Over 2.5';
+    else if (lowerContext.includes('btts') || lowerContext.includes('gg') || lowerContext.includes('both teams')) market = 'GG (BTTS)';
+    else if (lowerContext.includes('home win') || lowerContext.includes('direct win')) market = 'Home Win';
+    else if (lowerContext.includes('away win')) market = 'Away Win';
 
+    // List and Count detection MUST come from current USER INTENT only
     let count: number | undefined;
-    let isListRequested = text.includes('list') || text.includes('top') || text.includes('show') || text.includes('get');
-    
-    // More specific regex: "top 10", "get 5 matches", etc.
-    const countMatch = text.match(/\b(top|get|want|show|list|give me)\s*(\d{1,2})\b/) || text.match(/\b(\d{1,2})\s*(matches|games|picks)\b/);
-    if (countMatch) {
-      count = parseInt(countMatch[2] || countMatch[1]);
-    } else if (text.includes('top 10') || text.includes('ten matches')) {
-      count = 10;
-    } else if (text.includes('top 5') || text.includes('five matches')) {
-      count = 5;
+    let isListRequested = false;
+
+    if (userIntentText) {
+      isListRequested = userIntentText.includes('list') || userIntentText.includes('top') || userIntentText.includes('show') || userIntentText.includes('get');
+      
+      const countMatch = userIntentText.match(/\b(top|get|want|show|list|give me)\s*(\d{1,2})\b/) || userIntentText.match(/\b(\d{1,2})\s*(matches|games|picks)\b/);
+      if (countMatch) {
+        count = parseInt(countMatch[2] || countMatch[1]);
+      } else if (userIntentText.includes('top 10') || userIntentText.includes('ten matches')) {
+        count = 10;
+      } else if (userIntentText.includes('top 5') || userIntentText.includes('five matches')) {
+        count = 5;
+      }
     }
     
     return { market, count, isListRequested };
