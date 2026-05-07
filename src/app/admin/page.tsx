@@ -198,6 +198,17 @@ export default function AdminPage() {
     }
   };
 
+  /* ── Load Processed Data ─────────────────────────────────────── */
+  const loadProcessedData = async () => {
+    try {
+      const res = await fetch('/api/admin/processed-data');
+      const json = await res.json();
+      if (json.success) setProcessedData(json.data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   /* ── Delete Processed Data ──────────────────────────────────── */
   const deleteProcessedRecord = async (id: string) => {
     if (!confirm('Are you sure you want to delete this intelligence record?')) return;
@@ -233,6 +244,22 @@ export default function AdminPage() {
       showNotification('Network or server error occurred while trying to scrape.', 'error');
     } finally {
       setIsScrapingTarget(null);
+    }
+  };
+
+  /* ── Load History ─────────────────────────────────────────── */
+  const loadHistory = async (pageNum = historyPage, search = historySearch) => {
+    try {
+      const res = await fetch(`/api/admin/history?page=${pageNum}&search=${encodeURIComponent(search)}`);
+      const json = await res.json();
+      if (json.success) {
+        setHistory(json.data);
+        setHistoryPage(json.pagination.page);
+        setHistoryTotalPages(json.pagination.totalPages);
+        setHistoryPageInput(json.pagination.page.toString());
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
