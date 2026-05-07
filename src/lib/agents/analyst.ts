@@ -1,5 +1,6 @@
 import { AIFactory, AIConfig, PredictionResult } from "../ai/provider";
 import { MatchData } from "./scraper";
+import { EnrichedMatch } from "./processor";
 
 export interface BetSlip {
   id: string;
@@ -17,20 +18,82 @@ export class AnalystAgent {
   }
 
   /**
-   * Generate low-risk 2× accumulator betting slips.
-   *
-   * Rules (enforced strictly):
-   * - Target is always ~2× odds.
-   * - Each ticket has a MAXIMUM of 3 games.
-   * - Tickets can also be single-game (1 very confident pick).
-   * - NO match appears on more than one ticket — each game is unique globally.
-   * - Minimum AI confidence: 80% per pick.
-   * - Maximum odds per game: 1.65 (keeps it in the "safe" zone).
-   * - If chat context is present, its suggested markets are prioritized first.
-   *
-   * @param matches     - Scraped match data from the DB
-   * @param targetOdds  - Ignored; always builds 2× slips internally
-   * @param chatContext - Optional: recent chat conversation context to guide selection
+   * Generate precision 2× slips from ENRICHED ProcessedData.
+   * Uses pre-computed implied probabilities — much faster and more accurate.
+   * Only ELITE and HIGH tier matches are considered.
+   */
+  async generateSlipsFromEnriched(
+    enriched: EnrichedMatch[],
+    chatContext?: string
+  ): Promise<BetSlip[]> {
+    console.log(`[AnalystAgent] Generating precision slips from ${enriched.length} enriched matches...`);
+
+    // Filter to ELITE + HIGH only
+    const qualified = enriched.filter(m =>
+      m.confidenceTier === 'ELITE' || m.confidenceTier === 'HIGH'
+    );
+
+    if (qualified.length === 0) {
+      console.warn('[AnalystAgent] No ELITE or HIGH tier matches available.');
+      return [];
+    }
+
+    // Convert enriched matches to PredictionResult format
+    const predictions: PredictionResult[] = qualified.map(m => {
+      // Pick the strongest market
+      const candidates: [string, number | null, number | null][] = [
+        ['Home Win',  m.impliedProbs.home,   m.bestOdds.home],
+        ['Away Win',  m.impliedProbs.away,   m.bestOdds.away],
+        ['GG (BTTS)', m.impliedProbs.btts,   m.bestOdds.btts],
+        ['Over 2.5',  m.impliedProbs.over25, m.bestOdds.over25],
+      ].filter(([, p, o]) => p !== null && o !== null && o >= 1.10 && o <= 1.65) as [string, number, number][];
+
+      if (!candidates.length) return null;
+      candidates.sort((a, b) => b[1] - a[1]);
+      const [selection, probability, odds] = candidates[0];
+
+      return {
+        match:       `${m.homeTeam} vs ${m.awayTeam}`,
+        prediction:  selection,
+        odds,
+        probability,
+        reasoning:   `Implied probability: ${(probability * 100).toFixed(1)}% | League: ${m.league} | Sources: ${m.sources.join(', ')}${m.hasBookmakerData ? ' | ✓ Bookmaker data' : ''}`,
+        league:      m.league,
+        homeTeam:    m.homeTeam,
+        awayTeam:    m.awayTeam,
+        status:      'PENDING',
+        confidence:  Math.round(probability * 100)
+      };
+    }).filter(Boolean) as PredictionResult[];
+
+    // Boost chat-context matches to front
+    let sorted = [...predictions].sort((a, b) => b.probability - a.probability);
+    if (chatContext && chatContext.trim().length > 20) {
+      const keywords = chatContext.toLowerCase().match(/\b(\w{3,})\b/g) || [];
+      sorted = [
+        ...sorted.filter(p => keywords.some(kw => p.match.toLowerCase().includes(kw) || p.reasoning.toLowerCase().includes(kw))),
+        ...sorted.filter(p => !keywords.some(kw => p.match.toLowerCase().includes(kw) || p.reasoning.toLowerCase().includes(kw)))
+      ];
+    }
+
+    // Build up to 3 unique tickets
+    const slips: BetSlip[] = [];
+    const usedGlobally = new Set<string>();
+
+    for (let ticketNum = 0; ticketNum < 3; ticketNum++) {
+      const available = sorted.filter(p => !usedGlobally.has(p.match));
+      if (available.length === 0) break;
+      const slip = this.buildPrecisionTicket(available, ticketNum + 1);
+      if (slip.matches.length === 0) break;
+      slip.matches.forEach(m => usedGlobally.add(m.match));
+      slips.push(slip);
+    }
+
+    return slips;
+  }
+
+  /**
+   * Generate precision 2× slips from RAW ScrapedData (fallback when no ProcessedData available).
    */
   async generateSlips(
     matches: MatchData[],

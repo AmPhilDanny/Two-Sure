@@ -42,10 +42,15 @@ export class APIFootballDotComService implements FootballApiService {
       league: m.league_name,
       date: `${m.match_date}T${m.match_time}`,
       externalId: m.match_id,
-      rawData: m, // Save everything
+      rawData: m, // Preserve original API structure (contains odds/probs)
       stats: {
         last5: { home: m.match_hometeam_system, away: m.match_awayteam_system },
-        bttsOdds: parseFloat(m.prob_btts) || 0
+        bttsOdds: parseFloat(m.prob_btts) || 0,
+        probabilities: {
+          home: parseFloat(m.prob_HW) || 0,
+          draw: parseFloat(m.prob_D) || 0,
+          away: parseFloat(m.prob_AW) || 0
+        }
       }
     }));
   }

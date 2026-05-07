@@ -50,6 +50,8 @@ export default function AdminPage() {
   const [isCleaning, setIsCleaning] = useState(false);
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -363,6 +365,33 @@ export default function AdminPage() {
       console.error('Failed to update status', e);
     }
   };
+
+  const handleCsvUpload = async () => {
+    if (!csvFile) return;
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', csvFile);
+      const res = await fetch('/api/admin/ingest/bookmaker-csv', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification(data.message, 'success');
+        setCsvFile(null);
+        loadScrapedData();
+      } else {
+        showNotification(data.error || 'Upload failed', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      showNotification('An error occurred during upload', 'error');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
 
   /* ── Loading state ───────────────────────────────────────── */
   if (loading) {
@@ -827,6 +856,31 @@ export default function AdminPage() {
                       {scrapedData.length > 0 && <span className="badge badge-purple">{scrapedData.length} records</span>}
                     </h3>
                     <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 border-r border-border pr-3">
+                        <input
+                          type="file"
+                          accept=".csv"
+                          onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+                          className="hidden"
+                          id="csv-upload"
+                        />
+                        <label
+                          htmlFor="csv-upload"
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary text-xs font-semibold cursor-pointer hover:bg-muted transition-colors border border-border"
+                        >
+                          {csvFile ? csvFile.name : 'Select Bookmaker CSV'}
+                        </label>
+                        {csvFile && (
+                          <button
+                            onClick={handleCsvUpload}
+                            disabled={isUploading}
+                            className="btn-primary text-xs px-3 py-1.5 h-auto"
+                          >
+                            {isUploading ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                            Import
+                          </button>
+                        )}
+                      </div>
                       <div className="relative">
                         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                         <input
@@ -991,6 +1045,9 @@ export default function AdminPage() {
                               <span className="text-xs font-mono text-muted-foreground bg-secondary/50 px-2 py-1 rounded">
                                 {formatToWAT(d.createdAt)}
                               </span>
+                              {d.homeTeam === 'Enriched Intelligence' && (
+                                <span className="badge badge-green text-[10px]">ENRICHED ENGINE</span>
+                              )}
                               <button 
                                 onClick={() => deleteProcessedRecord(d.id)}
                                 className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
@@ -999,9 +1056,21 @@ export default function AdminPage() {
                                 <Trash2 size={12} />
                               </button>
                             </div>
-                            <span className="badge badge-purple">
-                              {Array.isArray(d.structuredData) ? d.structuredData.length : 'Object'} Items Processed
-                            </span>
+                            <div className="flex items-center gap-2">
+                              {d.homeTeam === 'Enriched Intelligence' && Array.isArray(d.structuredData) && (
+                                <>
+                                  <span className="badge badge-purple text-[10px]">
+                                    {d.structuredData.filter((m: any) => m.confidenceTier === 'ELITE').length} ELITE
+                                  </span>
+                                  <span className="badge badge-cyan text-[10px]">
+                                    {d.structuredData.filter((m: any) => m.confidenceTier === 'HIGH').length} HIGH
+                                  </span>
+                                </>
+                              )}
+                              <span className="badge badge-gray text-[10px]">
+                                {Array.isArray(d.structuredData) ? d.structuredData.length : 'Object'} Matches
+                              </span>
+                            </div>
                           </div>
                           <div className="prose prose-sm dark:prose-invert max-w-none text-foreground prose-p:leading-relaxed prose-headings:font-bold prose-a:text-primary">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>

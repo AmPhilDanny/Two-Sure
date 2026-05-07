@@ -29,16 +29,47 @@ export class APIFootballService implements FootballApiService {
 
   async getTodayFixtures(daysAhead: number = 0): Promise<NormalizedFixture[]> {
     const today = new Date().toISOString().split('T')[0];
-    const data = await this.fetchFromAPI('fixtures', { date: today }); // This API usually only does 1 date per request
     
-    return (data.response || []).map((f: any) => ({
-      homeTeam: f.teams.home.name,
-      awayTeam: f.teams.away.name,
-      league: f.league.name,
-      date: f.fixture.date,
-      externalId: f.fixture.id.toString(),
-      rawData: f
-    }));
+    console.log(`[API-Football] Fetching fixtures and odds for ${today}...`);
+    
+    // 1. Fetch fixtures
+    const fixturesRes = await this.fetchFromAPI('fixtures', { date: today });
+    const fixtures = fixturesRes.response || [];
+
+    // 2. Fetch odds for today
+    const oddsRes = await this.fetchFromAPI('odds', { date: today });
+    const odds = oddsRes.response || [];
+
+    // 3. Create an odds map for fast lookup
+    const oddsMap = new Map();
+    odds.forEach((o: any) => {
+      const bookmaker = o.bookmakers?.[0] || {};
+      const market1X2 = bookmaker.bets?.find((b: any) => b.name === 'Match Winner');
+      if (market1X2) {
+        oddsMap.set(o.fixture.id, {
+          home: market1X2.values.find((v: any) => v.value === 'Home')?.odd,
+          draw: market1X2.values.find((v: any) => v.value === 'Draw')?.odd,
+          away: market1X2.values.find((v: any) => v.value === 'Away')?.odd,
+        });
+      }
+    });
+
+    return fixtures.map((f: any) => {
+      const matchOdds = oddsMap.get(f.fixture.id);
+      return {
+        homeTeam: f.teams.home.name,
+        awayTeam: f.teams.away.name,
+        league: f.league.name,
+        date: f.fixture.date,
+        externalId: f.fixture.id.toString(),
+        rawData: {
+          ...f,
+          odd_1: matchOdds?.home,
+          odd_x: matchOdds?.draw,
+          odd_2: matchOdds?.away
+        }
+      };
+    });
   }
 
   async testConnection(): Promise<boolean> {

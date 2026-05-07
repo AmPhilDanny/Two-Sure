@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { AnalystAgent } from '@/lib/agents/analyst';
 import { HealthAgent } from '@/lib/agents/health';
+import { ProcessorAgent } from '@/lib/agents/processor';
 import { configService } from '@/lib/services/config';
 import { AIConfig } from '@/lib/ai/provider';
 import prisma from '@/lib/prisma';
@@ -62,40 +63,47 @@ export async function GET(request: Request) {
     fallbackModel,
   };
 
-  const analyst = new AnalystAgent(aiConfig);
-  const health = new HealthAgent();
+    const analyst = new AnalystAgent(aiConfig);
+    const health = new HealthAgent();
 
   try {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    let slips;
 
-    const cachedMatches = await prisma.scrapedData.findMany({
-      where: {
-        createdAt: {
-          gte: startOfToday
-        }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 40 // Capped at 40 to keep AI batch within timeout budget
-    });
+    // ── Priority 1: Use enriched ProcessedData if available today ─────────────
+    const enrichedMatches = await ProcessorAgent.getLatestEnriched();
+    if (enrichedMatches && enrichedMatches.length > 0) {
+      console.log(`[Predictions] Using enriched data: ${enrichedMatches.length} matches.`);
+      slips = await analyst.generateSlipsFromEnriched(enrichedMatches, chatContext);
+    } else {
+      // ── Priority 2: Fall back to raw ScrapedData ──────────────────────────
+      console.log('[Predictions] No enriched data found. Falling back to raw ScrapedData.');
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
 
-    if (cachedMatches.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'No match data scraped for today yet. Please run the Scraper Agent from the Admin panel first.'
-      }, { status: 422 });
+      const cachedMatches = await prisma.scrapedData.findMany({
+        where: { createdAt: { gte: startOfToday } },
+        orderBy: { createdAt: 'desc' },
+        take: 40
+      });
+
+      if (cachedMatches.length === 0) {
+        return NextResponse.json({
+          success: false,
+          error: 'No match data scraped for today yet. Please run the Scraper Agent from the Admin panel first.'
+        }, { status: 422 });
+      }
+
+      const matchData = cachedMatches.map(m => ({
+        homeTeam: m.homeTeam,
+        awayTeam: m.awayTeam,
+        league: m.league,
+        odds: m.odds as any,
+        apiStats: m.rawStats as any,
+        sourceType: 'api' as const
+      }));
+
+      slips = await analyst.generateSlips(matchData, targets, chatContext);
     }
-
-    const matchData = cachedMatches.map(m => ({
-      homeTeam: m.homeTeam,
-      awayTeam: m.awayTeam,
-      league: m.league,
-      odds: m.odds as any,
-      apiStats: m.rawStats as any,
-      sourceType: 'api' as const
-    }));
-
-    const slips = await analyst.generateSlips(matchData, targets, chatContext);
     const systemHealth = await health.checkSystemHealth();
     
     if (!slips || slips.length === 0) {

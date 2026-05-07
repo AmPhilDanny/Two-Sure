@@ -148,30 +148,64 @@ export class ScraperAgent {
   private processApiData(fixtures: NormalizedFixture[], name: string): MatchData[] {
     return fixtures.map(f => {
       const raw = f.rawData || {};
-      let home = 2.0, draw = 3.0, away = 3.0, btts = 1.9, over = 1.8, under = 1.8;
+      const stats = f.stats || {};
+      
+      // Default to null so the Processor knows data is missing
+      let home: number | null = null;
+      let draw: number | null = null;
+      let away: number | null = null;
+      let btts: number | null = null;
+      let over: number | null = null;
+      let under: number | null = null;
 
+      // 1. Try to find real decimal odds
       if (raw.odd_1) home = parseFloat(raw.odd_1);
-      else if (raw.prob_HW) home = parseFloat((100 / parseFloat(raw.prob_HW)).toFixed(2));
-
+      else if (raw.match_hometeam_extra_coords) home = parseFloat(raw.match_hometeam_extra_coords); // api-football variation
+      
       if (raw.odd_x) draw = parseFloat(raw.odd_x);
-      else if (raw.prob_D) draw = parseFloat((100 / parseFloat(raw.prob_D)).toFixed(2));
+      else if (raw.match_draw_extra_coords) draw = parseFloat(raw.match_draw_extra_coords);
 
       if (raw.odd_2) away = parseFloat(raw.odd_2);
-      else if (raw.prob_AW) away = parseFloat((100 / parseFloat(raw.prob_AW)).toFixed(2));
+      else if (raw.match_awayteam_extra_coords) away = parseFloat(raw.match_awayteam_extra_coords);
 
-      if (raw.prob_btts) btts = parseFloat((100 / parseFloat(raw.prob_btts)).toFixed(2));
+      // 2. Fallback to probabilities (convert % to decimal odds)
+      const probHW = raw.prob_HW || stats.probabilities?.home;
+      const probD  = raw.prob_D  || stats.probabilities?.draw;
+      const probAW = raw.prob_AW || stats.probabilities?.away;
+
+      if (!home && probHW) home = parseFloat((100 / parseFloat(probHW)).toFixed(2));
+      if (!draw && probD)  draw = parseFloat((100 / parseFloat(probD)).toFixed(2));
+      if (!away && probAW) away = parseFloat((100 / parseFloat(probAW)).toFixed(2));
+
+      // 3. Handle extra markets
+      if (raw.prob_btts || stats.bttsOdds) {
+        const pBtts = raw.prob_btts || stats.bttsOdds;
+        btts = parseFloat((100 / parseFloat(pBtts)).toFixed(2));
+      }
+      
       if (raw.prob_O) over = parseFloat((100 / parseFloat(raw.prob_O)).toFixed(2));
       if (raw.prob_U) under = parseFloat((100 / parseFloat(raw.prob_U)).toFixed(2));
 
+      // If still null, use a slightly realistic baseline but mark it clearly
+      // This prevents the "everyone is 2.0" issue while still allowing the Processor to function
       return {
         id: f.externalId,
         homeTeam: f.homeTeam,
         awayTeam: f.awayTeam,
         league: f.league,
-        odds: { home, draw, away, btts, over25: over, under25: under },
+        odds: { 
+          home: home || 2.0, 
+          draw: draw || 3.0, 
+          away: away || 3.0, 
+          btts: btts || 1.9, 
+          over25: over || 1.8, 
+          under25: under || 1.8 
+        },
         apiStats: { 
           source: name, 
           ...f.stats, 
+          hasRealOdds: !!(raw.odd_1 || raw.odd_x || raw.odd_2),
+          hasProbs: !!(probHW || probD || probAW),
           last5: f.stats?.last5 || { home: raw.match_hometeam_system || 'N/A', away: raw.match_awayteam_system || 'N/A' },
           original: raw
         },
