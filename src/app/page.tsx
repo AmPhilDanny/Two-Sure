@@ -366,7 +366,7 @@ export default function HomePage() {
           <motion.div variants={fadeUp}>
             <span className="badge badge-purple gap-2">
               <span className="dot-online" />
-              Neural Network Live
+              TwoSure Engine Live
             </span>
           </motion.div>
 
@@ -375,7 +375,7 @@ export default function HomePage() {
             className="font-display text-4xl sm:text-5xl font-black tracking-tight text-foreground leading-[1.1]"
           >
             Multi-Agent <br />
-            <span className="gradient-text">Neural Consensus</span>
+            <span className="gradient-text">TwoSure Consensus</span>
           </motion.h1>
 
           <motion.p variants={fadeUp} className="text-muted-foreground text-lg leading-relaxed">
@@ -685,8 +685,8 @@ export default function HomePage() {
         >
           <motion.div variants={fadeUp} className="flex items-center justify-between">
             <div>
-              <h2 className="font-display text-2xl font-black text-foreground uppercase tracking-tight">Premium Slips</h2>
-              <p className="text-sm text-muted-foreground mt-1 font-medium">Latest neural consensus picks</p>
+              <h2 className="font-display text-2xl font-black text-foreground uppercase tracking-tight">TwoSure Slips</h2>
+              <p className="text-sm text-muted-foreground mt-1 font-medium">Latest TwoSure consensus picks</p>
             </div>
             <div className="flex items-center gap-2">
               {[2, 5, 10].map(t => (
@@ -776,7 +776,7 @@ export default function HomePage() {
               <h2 className="font-display text-2xl font-black text-foreground flex items-center gap-3 uppercase tracking-tight">
                 <History size={24} className="text-primary" /> Generation History
               </h2>
-              <p className="text-sm text-muted-foreground mt-1 font-medium">Archive of past neural consensus iterations</p>
+              <p className="text-sm text-muted-foreground mt-1 font-medium">Archive of past TwoSure consensus iterations</p>
             </div>
             <div className="h-10 w-px bg-border hidden sm:block" />
             <div className="badge badge-purple px-3 py-1 text-xs">
