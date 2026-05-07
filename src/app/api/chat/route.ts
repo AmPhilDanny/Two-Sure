@@ -65,9 +65,17 @@ export async function POST(request: Request) {
     const ai = new AIFactory(aiConfig);
 
     // ── Fetch today's match context from DB ─────────────────────────────────
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     const recentMatches = await prisma.scrapedData.findMany({
+      where: {
+        createdAt: {
+          gte: startOfToday
+        }
+      },
       orderBy: { createdAt: 'desc' },
-      take: 50
+      take: 200 // Increased from 50 to 200 for broader coverage
     });
 
     const context = recentMatches.map(m => {
@@ -75,8 +83,8 @@ export async function POST(request: Request) {
     }).join('\n');
 
     const fullMessage = context.length > 0
-      ? `DATABASE CONTEXT — Today's Matches:\n${context}\n\nCONVERSATION HISTORY:\n${history.map((h: any) => `${h.role.toUpperCase()}: ${h.content}`).join('\n')}\n\nUSER QUESTION: ${message}\n\nINSTRUCTIONS:\n1. Use the DATABASE CONTEXT to find relevant matches.\n2. For "GG" / "Goal-Goal" / "BTTS", identify matches with competitive odds or attacking teams.\n3. For "Over/Under 2.5", reference the over25/under25 odds where available.\n4. Be professional. List specific teams. If no matches fit, say so clearly.`
-      : `No match data in database yet.\n\nUSER QUESTION: ${message}\n\nPlease let the user know there is no match data available yet, and suggest they run the scraper from the Admin panel.`;
+      ? `DATABASE CONTEXT — Today's Matches (${new Date().toDateString()}):\n${context}\n\nCONVERSATION HISTORY:\n${history.map((h: any) => `${h.role.toUpperCase()}: ${h.content}`).join('\n')}\n\nUSER QUESTION: ${message}\n\nINSTRUCTIONS:\n1. Use the DATABASE CONTEXT to find relevant matches.\n2. If the user asks for "Top X" or "Safest" matches, analyze the odds: lower odds (1.20 - 1.50) usually indicate "Low Risk", while high odds indicate "High Reward".\n3. For "GG" / "Goal-Goal" / "BTTS", identify matches with competitive odds or attacking teams.\n4. For "Over/Under", reference the over25/under25 odds. If the user asks for Over 1.5, infer it from the Over 2.5 probability.\n5. Be professional. List specific teams and why you chose them. If no matches fit, say so clearly.`
+      : `No match data for today (${new Date().toDateString()}) in the database yet.\n\nUSER QUESTION: ${message}\n\nPlease let the user know there is no match data available yet for today, and suggest they run the scraper from the Admin panel.`;
 
     const response = await ai.process(recentMatches, fullMessage);
 

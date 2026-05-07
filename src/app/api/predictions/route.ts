@@ -73,7 +73,7 @@ export async function GET(request: Request) {
         }
       },
       orderBy: { createdAt: 'desc' },
-      take: 50
+      take: 200 // Increased from 50 to 200
     });
 
     const matchData = cachedMatches.map(m => ({
