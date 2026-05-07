@@ -189,8 +189,8 @@ export class ScraperAgent {
         btts = parseFloat((100 / parseFloat(pBtts)).toFixed(2));
       }
       
-      if (raw.prob_O) over = parseFloat((100 / parseFloat(raw.prob_O)).toFixed(2));
-      if (raw.prob_U) under = parseFloat((100 / parseFloat(raw.prob_U)).toFixed(2));
+      if (raw.prob_O) over25 = parseFloat((100 / parseFloat(raw.prob_O)).toFixed(2));
+      if (raw.prob_U) under25 = parseFloat((100 / parseFloat(raw.prob_U)).toFixed(2));
 
       // If still null, use a slightly realistic baseline but mark it clearly
       // This prevents the "everyone is 2.0" issue while still allowing the Processor to function
