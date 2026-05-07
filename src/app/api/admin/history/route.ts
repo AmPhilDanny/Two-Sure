@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || '';
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: any = { archived: false };
     if (search) {
       where.OR = [
         { status: { contains: search, mode: 'insensitive' } },

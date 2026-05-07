@@ -20,9 +20,15 @@ export class AnalystAgent {
   /**
    * Parse user intent from chat context (e.g., "Top 10 Over 1.5 goals")
    */
-  private parseIntent(chatContext?: string): { market?: string; count?: number } {
+  private parseIntent(chatContext?: string): { market?: string; count?: number; isListRequested?: boolean } {
     if (!chatContext) return {};
-    const text = chatContext.toLowerCase();
+    
+    // Prioritize actual USER INTENT section if present
+    let text = chatContext.toLowerCase();
+    const userIntentMatch = chatContext.match(/USER INTENT: (.*?)(\n\n|$)/s);
+    if (userIntentMatch) {
+      text = userIntentMatch[1].toLowerCase();
+    }
     
     let market: string | undefined;
     if (text.includes('1.5') || text.includes('one point five')) market = 'Over 1.5';
@@ -32,7 +38,10 @@ export class AnalystAgent {
     else if (text.includes('away win')) market = 'Away Win';
 
     let count: number | undefined;
-    const countMatch = text.match(/\b(top|get|want|show|list)\s*(\d{1,2})\b/) || text.match(/\b(\d{1,2})\s*matches\b/);
+    let isListRequested = text.includes('list') || text.includes('top') || text.includes('show') || text.includes('get');
+    
+    // More specific regex: "top 10", "get 5 matches", etc.
+    const countMatch = text.match(/\b(top|get|want|show|list|give me)\s*(\d{1,2})\b/) || text.match(/\b(\d{1,2})\s*(matches|games|picks)\b/);
     if (countMatch) {
       count = parseInt(countMatch[2] || countMatch[1]);
     } else if (text.includes('top 10') || text.includes('ten matches')) {
@@ -41,7 +50,7 @@ export class AnalystAgent {
       count = 5;
     }
     
-    return { market, count };
+    return { market, count, isListRequested };
   }
 
   /**
@@ -115,8 +124,8 @@ export class AnalystAgent {
 
     let sorted = [...predictions].sort((a, b) => b.probability - a.probability);
 
-    // If "Long Slip Mode" (e.g., Top 10) requested
-    if (intent.count && intent.count > 3) {
+    // If "Long Slip Mode" (e.g., Top 10) requested explicitly
+    if (intent.isListRequested && intent.count && intent.count > 3) {
       console.log(`[AnalystAgent] Long Slip Mode: Building ticket with ${intent.count} matches.`);
       const matches = sorted.slice(0, intent.count);
       let combinedOdds = 1.0;
