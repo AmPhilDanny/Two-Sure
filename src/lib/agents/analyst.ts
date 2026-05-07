@@ -27,13 +27,15 @@ export class AnalystAgent {
     const userIntentMatch = chatContext.match(/USER INTENT: (.*?)(\n\n|$)/s);
     const userIntentText = userIntentMatch ? userIntentMatch[1].toLowerCase() : null;
     
-    // Market detection can use the whole context for continuity
+    // Market detection: Prioritize current user intent, then fallback to context
     let market: string | undefined;
-    if (lowerContext.includes('1.5') || lowerContext.includes('one point five')) market = 'Over 1.5';
-    else if (lowerContext.includes('2.5') || lowerContext.includes('two point five')) market = 'Over 2.5';
-    else if (lowerContext.includes('btts') || lowerContext.includes('gg') || lowerContext.includes('both teams')) market = 'GG (BTTS)';
-    else if (lowerContext.includes('home win') || lowerContext.includes('direct win')) market = 'Home Win';
-    else if (lowerContext.includes('away win')) market = 'Away Win';
+    const marketText = userIntentText || lowerContext;
+
+    if (marketText.includes('btts') || marketText.includes('gg') || marketText.includes('both teams')) market = 'GG (BTTS)';
+    else if (marketText.includes('home win') || marketText.includes('direct win')) market = 'Home Win';
+    else if (marketText.includes('away win')) market = 'Away Win';
+    else if (marketText.includes('2.5') || marketText.includes('two point five')) market = 'Over 2.5';
+    else if (marketText.includes('1.5') || marketText.includes('one point five')) market = 'Over 1.5';
 
     // List and Count detection MUST come from current USER INTENT only
     let count: number | undefined;
