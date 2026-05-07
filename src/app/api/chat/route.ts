@@ -3,6 +3,9 @@ import { configService } from '@/lib/services/config';
 import { AIFactory, AIConfig } from '@/lib/ai/provider';
 import prisma from '@/lib/prisma';
 
+// Extend Vercel function timeout to 60s for AI chat processing
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const { message, history = [] } = await request.json();

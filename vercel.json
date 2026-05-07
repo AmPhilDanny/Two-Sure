@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "src/app/api/predictions/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/chat/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/admin/process/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/cron/scrape/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

@@ -5,6 +5,9 @@ import { configService } from '@/lib/services/config';
 import { AIConfig } from '@/lib/ai/provider';
 import prisma from '@/lib/prisma';
 
+// Extend Vercel function timeout to 60s for AI processing
+export const maxDuration = 60;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const targetStr = searchParams.get('targets');
@@ -73,8 +76,15 @@ export async function GET(request: Request) {
         }
       },
       orderBy: { createdAt: 'desc' },
-      take: 200 // Increased from 50 to 200
+      take: 40 // Capped at 40 to keep AI batch within timeout budget
     });
+
+    if (cachedMatches.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'No match data scraped for today yet. Please run the Scraper Agent from the Admin panel first.'
+      }, { status: 422 });
+    }
 
     const matchData = cachedMatches.map(m => ({
       homeTeam: m.homeTeam,
@@ -88,6 +98,13 @@ export async function GET(request: Request) {
     const slips = await analyst.generateSlips(matchData, targets, chatContext);
     const systemHealth = await health.checkSystemHealth();
     
+    if (!slips || slips.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: 'No qualifying matches found with 80%+ confidence today. Try running the Scraper to get fresh data, or ask the AI Assistant for a specific market.'
+      }, { status: 422 });
+    }
+
     const sessionId = `session_${Date.now()}`;
 
     await Promise.all(slips.map(slip =>
